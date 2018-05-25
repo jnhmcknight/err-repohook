@@ -31,7 +31,7 @@ class CommonGitWebProvider(object):
         return message
 
     def render_template(self, template='generic', **kwargs):
-        kwargs['repo_name'] = kwargs.get('repo_name') or self.name
+        kwargs['provider'] = kwargs.get('provider') or self.name
         return tenv().get_template('{0}.html'.format(template)).render(**kwargs)
 
     def msg_generic(self, body, repo, event_type):
@@ -41,6 +41,10 @@ class CommonGitWebProvider(object):
 
 class GithubHandlers(CommonGitWebProvider):
     name = 'Github'
+
+    def create_message(self, body, event_type, repo):
+        repo = self.get_repo_shortname(body)
+        return super(GithubHandlers, self).create_message(body, event_type, repo)
 
     @staticmethod
     def valid_message(request, token):
@@ -69,6 +73,9 @@ class GithubHandlers(CommonGitWebProvider):
 
     def get_repo(self, body):
         return body['repository']['full_name']
+
+    def get_repo_shortname(self, body):
+        return body['repository']['name']
 
     def msg_issues(self, body, repo):
         return self.render_template(
@@ -111,12 +118,17 @@ class GithubHandlers(CommonGitWebProvider):
         )
 
     def msg_push(self, body, repo):
+        commit_messages = [
+            dict(msg=c['message'][:80].split('\n')[0], hash=c['id'][:8],
+                 url=c['url']) for c in body['commits']
+        ]
         return self.render_template(
             template='push', body=body, repo=repo,
             user=body['pusher']['name'],
             commits=len(body['commits']),
             branch=body['ref'].split('/')[-1],
             url=body['compare'],
+            commit_messages=commit_messages,
         )
 
     def msg_status(*args):
